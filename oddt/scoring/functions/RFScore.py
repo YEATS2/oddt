@@ -112,6 +112,14 @@ class rfscore(scorer):
                            'vina_num_rotors']
             vina = oddt_vina_descriptor(protein, vina_scores=vina_scores)
             descriptors = ensemble_descriptor((vina, cc))
+        elif version == 5:
+            cutoff = np.array([0, 2, 4, 6, 8, 10, 12])
+            mtry = 14
+            descriptors = close_contacts_descriptor(
+                protein,
+                cutoff=cutoff,
+                protein_types=protein_atomic_nums,
+                ligand_types=ligand_atomic_nums)
         model = randomforest(n_estimators=500,
                              oob_score=True,
                              n_jobs=n_jobs,
