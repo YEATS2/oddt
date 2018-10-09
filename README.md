@@ -1,5 +1,11 @@
 # Open Drug Discovery Toolkit
 
+## Snippets (New)
+
+Code Snippets can be found [here](https://github.com/oddt/jcheminf).
+
+## Original Text
+
 Open Drug Discovery Toolkit (ODDT) is modular and comprehensive toolkit for use in cheminformatics, molecular modeling etc. ODDT is written in Python, and make extensive use of Numpy/Scipy
 
 [![Documentation Status](https://readthedocs.org/projects/oddt/badge/?version=latest)](http://oddt.readthedocs.org/en/latest/)

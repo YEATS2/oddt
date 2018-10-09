@@ -22,6 +22,9 @@ import csv
 import subprocess
 import os
 
+# OpenBabel
+import pybel
+
 __all__ = ['close_contacts_descriptor',
            'fingerprints',
            'autodock_vina_descriptor',
@@ -208,7 +211,7 @@ class close_contacts_descriptor(object):
             out.append(desc)
         return np.vstack(out)
 
-    def build_normModes(self, ligands, protein, protein_pdb):
+    def build_normModes(self, ligands, protein, protein_pdb, nmbr_modes):
         """Builds descriptors for series of ligands
 
         Parameters
@@ -268,7 +271,7 @@ class close_contacts_descriptor(object):
         anm = ANM('pdb ANM analysis')
         anm.buildHessian(calphas, cutoff=12.0)
         anm.getHessian().round(3)
-        anm.calcModes()
+        anm.calcModes(nmbr_modes)
 
         for mode in anm:
             desc = np.array(mode.getEigval(), dtype=int).flatten()
@@ -284,6 +287,81 @@ class close_contacts_descriptor(object):
         output = np.vstack(out)  
         # print(output.shape)
         # print("Done")
+        return output
+
+
+    def build_nmaLength(self, ligands, protein, protein_pdb, nmbr_modes):
+        """Builds descriptors for series of ligands
+
+        Parameters
+        ----------
+        ligands: iterable of oddt.toolkit.Molecules or oddt.toolkit.Molecule
+            A list or iterable of ligands to build the descriptor or a
+            single molecule.
+
+        protein: oddt.toolkit.Molecule or None (default=None)
+            Default protein to use as reference
+
+        """
+        if protein:
+            self.protein = protein
+        if is_molecule(ligands):
+            ligands = [ligands]
+        out = []
+        for mol in ligands:
+            mol_dict = atoms_by_type(mol.atom_dict, self.ligand_types, self.mode)
+            if self.aligned_pairs:
+                pairs = zip(self.ligand_types, self.protein_types)
+            else:
+                pairs = [(mol_type, prot_type)
+                         for mol_type in self.ligand_types
+                         for prot_type in self.protein_types]
+
+            dist = distance(self.protein.atom_dict['coords'],
+                            mol.atom_dict['coords'])
+            within_cutoff = (dist <= self.cutoff.max()).any(axis=1)
+            local_protein_dict = self.protein.atom_dict[within_cutoff]
+
+            prot_dict = atoms_by_type(local_protein_dict, self.protein_types,
+                                      self.mode)
+            desc = []
+            for mol_type, prot_type in pairs:
+                d = distance(prot_dict[prot_type]['coords'],
+                             mol_dict[mol_type]['coords'])[..., np.newaxis]
+                if len(self.cutoff) > 1:
+                    count = ((d > self.cutoff[..., 0]) &
+                             (d <= self.cutoff[..., 1])).sum(axis=(0, 1))
+
+                else:
+                    count = (d <= self.cutoff).sum()
+                desc.append(count)
+            desc = np.array(desc, dtype=int).flatten()
+            # print("Normal desc:")
+            # print(desc)
+            out.append(desc)
+            # print("out")
+            # print(out)
+
+        # New normal modes descriptors
+        # print(protein_pdb)
+        pdb = parsePDB(protein_pdb)
+        calphas = pdb.select('calpha')
+
+        anm = ANM('pdb ANM analysis')
+        anm.buildHessian(calphas, cutoff=12.0)
+        anm.getHessian().round(3)
+        anm.calcModes(n_modes = nmbr_modes)
+
+        # print("Before")
+        # print(out)
+
+        out = [np.append(out[0], np.array(len(anm.getEigvals())))]
+        out = [np.append(out[0], np.array(len(anm.getEigvecs())))]
+
+        # Print("After")
+        # Print(out)
+
+        output = np.vstack(out)  
         return output
 
 
@@ -530,6 +608,117 @@ class close_contacts_descriptor(object):
             out = [np.append(out[0], np.array(mode.getEigval()))]
 
         return np.vstack(out)
+
+
+    def build_num_rots(self, ligands, protein, ligand_sdf):
+        """Builds descriptors for series of ligands
+
+        Parameters
+        ----------
+        ligands: iterable of oddt.toolkit.Molecules or oddt.toolkit.Molecule
+            A list or iterable of ligands to build the descriptor or a
+            single molecule.
+
+        protein: oddt.toolkit.Molecule or None (default=None)
+            Default protein to use as reference
+
+        """
+        if protein:
+            self.protein = protein
+        if is_molecule(ligands):
+            ligands = [ligands]
+        out = []
+        for mol in ligands:
+            mol_dict = atoms_by_type(mol.atom_dict, self.ligand_types, self.mode)
+            if self.aligned_pairs:
+                pairs = zip(self.ligand_types, self.protein_types)
+            else:
+                pairs = [(mol_type, prot_type)
+                         for mol_type in self.ligand_types
+                         for prot_type in self.protein_types]
+
+            dist = distance(self.protein.atom_dict['coords'],
+                            mol.atom_dict['coords'])
+            within_cutoff = (dist <= self.cutoff.max()).any(axis=1)
+            local_protein_dict = self.protein.atom_dict[within_cutoff]
+
+            prot_dict = atoms_by_type(local_protein_dict, self.protein_types,
+                                      self.mode)
+            desc = []
+            for mol_type, prot_type in pairs:
+                d = distance(prot_dict[prot_type]['coords'],
+                             mol_dict[mol_type]['coords'])[..., np.newaxis]
+                if len(self.cutoff) > 1:
+                    count = ((d > self.cutoff[..., 0]) &
+                             (d <= self.cutoff[..., 1])).sum(axis=(0, 1))
+
+                else:
+                    count = (d <= self.cutoff).sum()
+                desc.append(count)
+            desc = np.array(desc, dtype=int).flatten()
+            out.append(desc)
+
+        for mol in pybel.readfile("sdf", ligand_sdf): # could be sdf or mol2
+            out = [np.append(out[0], np.array(mol.OBMol.NumRotors()))]
+
+        output = np.vstack(out)  
+        return output
+
+
+    def build_num_aromat_rings(self, ligands, protein, ligand_sdf):
+        """Builds descriptors for series of ligands
+
+        Parameters
+        ----------
+        ligands: iterable of oddt.toolkit.Molecules or oddt.toolkit.Molecule
+            A list or iterable of ligands to build the descriptor or a
+            single molecule.
+
+        protein: oddt.toolkit.Molecule or None (default=None)
+            Default protein to use as reference
+
+        """
+        if protein:
+            self.protein = protein
+        if is_molecule(ligands):
+            ligands = [ligands]
+        out = []
+        for mol in ligands:
+            mol_dict = atoms_by_type(mol.atom_dict, self.ligand_types, self.mode)
+            if self.aligned_pairs:
+                pairs = zip(self.ligand_types, self.protein_types)
+            else:
+                pairs = [(mol_type, prot_type)
+                         for mol_type in self.ligand_types
+                         for prot_type in self.protein_types]
+
+            dist = distance(self.protein.atom_dict['coords'],
+                            mol.atom_dict['coords'])
+            within_cutoff = (dist <= self.cutoff.max()).any(axis=1)
+            local_protein_dict = self.protein.atom_dict[within_cutoff]
+
+            prot_dict = atoms_by_type(local_protein_dict, self.protein_types,
+                                      self.mode)
+            desc = []
+            for mol_type, prot_type in pairs:
+                d = distance(prot_dict[prot_type]['coords'],
+                             mol_dict[mol_type]['coords'])[..., np.newaxis]
+                if len(self.cutoff) > 1:
+                    count = ((d > self.cutoff[..., 0]) &
+                             (d <= self.cutoff[..., 1])).sum(axis=(0, 1))
+
+                else:
+                    count = (d <= self.cutoff).sum()
+                desc.append(count)
+            desc = np.array(desc, dtype=int).flatten()
+            out.append(desc)
+
+        for mol in pybel.readfile("sdf", ligand_sdf): # could be sdf or mol2
+            result = ["Aromatic" for r in mol.OBMol.GetSSSR() if r.IsAromatic()]
+            out = [np.append(out[0], np.array(len(result)))]
+
+        output = np.vstack(out)  
+        return output
 
 
     def __len__(self):
