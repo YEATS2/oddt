@@ -212,7 +212,8 @@ class close_contacts_descriptor(object):
         return np.vstack(out)
 
     def build_normModes(self, ligands, protein, protein_pdb, nmbr_modes):
-        """Builds descriptors for series of ligands
+        """Builds normal modes eigenvalue descriptors for series of ligands
+        and proteins.
 
         Parameters
         ----------
@@ -222,6 +223,10 @@ class close_contacts_descriptor(object):
 
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
+
+        protein_pdb: the pdb id of the protein.
+
+        nmbr_modes: the number of normal modes that will be calculated.
 
         """
         if protein:
@@ -257,14 +262,9 @@ class close_contacts_descriptor(object):
                     count = (d <= self.cutoff).sum()
                 desc.append(count)
             desc = np.array(desc, dtype=int).flatten()
-            # print("Normal desc:")
-            # print(desc)
             out.append(desc)
-            # print("out")
-            # print(out)
 
         # New normal modes descriptors
-        # print(protein_pdb)
         pdb = parsePDB(protein_pdb)
         calphas = pdb.select('calpha')
 
@@ -275,23 +275,15 @@ class close_contacts_descriptor(object):
 
         for mode in anm:
             desc = np.array(mode.getEigval(), dtype=int).flatten()
-            # print("Eigenvalue")
-            # print(mode.getEigval().round(3))
-            # print("Eigenvector")
-            # print(mode.getEigvec().round(3))
-            # print ("out new:")
             out = [np.append(out[0], np.array(mode.getEigval()))]
-            # out = [np.append(out[0], np.array(mode.getEigvec()))]
-            # print(out)
 
         output = np.vstack(out)  
-        # print(output.shape)
-        # print("Done")
         return output
 
 
     def build_nmaLength(self, ligands, protein, protein_pdb, nmbr_modes):
-        """Builds descriptors for series of ligands
+        """Builds descriptors with number of eigenvalues
+        and eigenvectors for series of ligands and proteins.
 
         Parameters
         ----------
@@ -301,6 +293,10 @@ class close_contacts_descriptor(object):
 
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
+
+        protein_pdb: the pdb id of the protein.
+
+        nmbr_modes: the number of normal modes that will be calculated.
 
         """
         if protein:
@@ -336,11 +332,7 @@ class close_contacts_descriptor(object):
                     count = (d <= self.cutoff).sum()
                 desc.append(count)
             desc = np.array(desc, dtype=int).flatten()
-            # print("Normal desc:")
-            # print(desc)
             out.append(desc)
-            # print("out")
-            # print(out)
 
         # New normal modes descriptors
         # print(protein_pdb)
@@ -352,21 +344,15 @@ class close_contacts_descriptor(object):
         anm.getHessian().round(3)
         anm.calcModes(n_modes = nmbr_modes)
 
-        # print("Before")
-        # print(out)
-
         out = [np.append(out[0], np.array(len(anm.getEigvals())))]
         out = [np.append(out[0], np.array(len(anm.getEigvecs())))]
-
-        # Print("After")
-        # Print(out)
 
         output = np.vstack(out)  
         return output
 
 
     def build_bfactor(self, ligands, protein, protein_pdb):
-        """Builds descriptors for series of ligands
+        """Builds b-factor descriptors for series of ligands.
 
         Parameters
         ----------
@@ -376,6 +362,8 @@ class close_contacts_descriptor(object):
 
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
+
+        protein_pdb: the pdb id of the protein.
 
         """
         if protein:
@@ -426,7 +414,7 @@ class close_contacts_descriptor(object):
 
 
     def build_qik(self, ligands, protein, ligand_sdf):
-        """Builds descriptors for series of ligands
+        """Builds qikprop properties descriptors for series of ligands.
 
         Parameters
         ----------
@@ -435,7 +423,9 @@ class close_contacts_descriptor(object):
             single molecule.
 
         protein: oddt.toolkit.Molecule or None (default=None)
-            Default protein to use as reference
+            Default protein to use as reference.
+
+        ligand_sdf: the path to the sdf-file of the ligand.
 
         """
         if protein:
@@ -474,8 +464,6 @@ class close_contacts_descriptor(object):
             out.append(desc)
 
         lig_id = ligand_sdf[-15:-4]
-        # print("lig_id %s" % lig_id)
-        # Execute qikprop from command line
         subprocess.call("/opt/schrodinger2017-4/qikprop -NOJOBID %s" % ligand_sdf, shell=True)
 
         qikprops = {}
@@ -491,9 +479,6 @@ class close_contacts_descriptor(object):
                 qikprops["QPPMDCK"] = row["QPPMDCK"]
                 qikprops["QPlogKp"] = row["QPlogKp"]
 
-        # print("Properties: ")
-        # print(qikprops)
-        # print("ligand name: %s" % lig_id[:-7])
         
         lig_name = lig_id[:-7]
         subprocess.call("rm " + lig_name + "*", shell=True)
@@ -504,7 +489,7 @@ class close_contacts_descriptor(object):
             qikprops[prop]
             if qikprops[prop] == '':   # QikProp has failed
                 if fail == 0:
-                    with open("/home/lars/ScoreML/oddt/qikFail.txt", "a+") as results:
+                    with open("./qikFail.txt", "a+") as results:
                         results.write("%s \n" % lig_name)
                     fail = 1
                 out = [np.append(out[0], np.array(0))]
@@ -515,7 +500,7 @@ class close_contacts_descriptor(object):
 
 
     def build_eigval_qik(self, ligands, protein, protein_pdb, ligand_sdf):
-        """Builds descriptors for series of ligands
+        """Combines nma_eigenvalues and qikprop-properties descriptors for a series of ligands.
 
         Parameters
         ----------
@@ -525,6 +510,10 @@ class close_contacts_descriptor(object):
 
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
+
+        protein_pdb: the pdb id of the protein.
+
+        ligand_sdf: the path to the sdf-file of the ligand.
 
         """
         if protein:
@@ -587,7 +576,7 @@ class close_contacts_descriptor(object):
             qikprops[prop]
             if qikprops[prop] == '':   # QikProp has failed
                 if fail == 0:
-                    with open("/home/lars/ScoreML/oddt/qikFail_eigv.txt", "a+") as results:
+                    with open("./qikFail_eigv.txt", "a+") as results:
                         results.write("%s \n" % lig_name)
                     fail = 1
                 out = [np.append(out[0], np.array(0))]
@@ -611,7 +600,7 @@ class close_contacts_descriptor(object):
 
 
     def build_num_rots(self, ligands, protein, ligand_sdf):
-        """Builds descriptors for series of ligands
+        """Builds number of rotatable bonds descriptors for a series of ligands.
 
         Parameters
         ----------
@@ -621,6 +610,8 @@ class close_contacts_descriptor(object):
 
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
+
+        ligand_sdf: the path to the sdf-file of the ligand.
 
         """
         if protein:
@@ -658,7 +649,7 @@ class close_contacts_descriptor(object):
             desc = np.array(desc, dtype=int).flatten()
             out.append(desc)
 
-        for mol in pybel.readfile("sdf", ligand_sdf): # could be sdf or mol2
+        for mol in pybel.readfile("sdf", ligand_sdf): # can be sdf or mol2
             out = [np.append(out[0], np.array(mol.OBMol.NumRotors()))]
 
         output = np.vstack(out)  
@@ -666,7 +657,7 @@ class close_contacts_descriptor(object):
 
 
     def build_num_aromat_rings(self, ligands, protein, ligand_sdf):
-        """Builds descriptors for series of ligands
+        """Builds number of aromatic rings descriptors for series of ligands.
 
         Parameters
         ----------
@@ -677,6 +668,7 @@ class close_contacts_descriptor(object):
         protein: oddt.toolkit.Molecule or None (default=None)
             Default protein to use as reference
 
+        ligand_sdf: the path to the sdf-file of the ligand.
         """
         if protein:
             self.protein = protein
