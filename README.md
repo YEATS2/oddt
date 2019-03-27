@@ -1,5 +1,7 @@
 # Open Drug Discovery Toolkit
 
+A modified version for the use in *ET-Score*.
+
 ## Snippets (New)
 
 Code Snippets can be found [here](https://github.com/oddt/jcheminf).
