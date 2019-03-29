@@ -826,7 +826,114 @@ class close_contacts_descriptor(object):
         #     out = [np.append(out[0], np.array(mode.getEigval()))]
 
         return np.vstack(out)
+    
+    def build_improved_woqik(self, ligands, protein, protein_pdb, ligand_sdf, nmbr_modes):
+        """Combines #aromatic rings, #rotatable bons, #eigenvectors
+        and #eigenvalues as descriptors. Used in ET-Score.
+        Parameters
+        ----------
+        ligands: iterable of oddt.toolkit.Molecules or oddt.toolkit.Molecule
+            A list or iterable of ligands to build the descriptor or a
+            single molecule.
+        protein: oddt.toolkit.Molecule or None (default=None)
+            Default protein to use as reference
+        protein_pdb: the pdb id of the protein.
+        ligand_sdf: the path to the sdf-file of the ligand.
+        """
+        if protein:
+            self.protein = protein
+        if is_molecule(ligands):
+            ligands = [ligands]
+        out = []
+        for mol in ligands:
+            mol_dict = atoms_by_type(mol.atom_dict, self.ligand_types, self.mode)
+            if self.aligned_pairs:
+                pairs = zip(self.ligand_types, self.protein_types)
+            else:
+                pairs = [(mol_type, prot_type)
+                         for mol_type in self.ligand_types
+                         for prot_type in self.protein_types]
 
+            dist = distance(self.protein.atom_dict['coords'],
+                            mol.atom_dict['coords'])
+            within_cutoff = (dist <= self.cutoff.max()).any(axis=1)
+            local_protein_dict = self.protein.atom_dict[within_cutoff]
+
+            prot_dict = atoms_by_type(local_protein_dict, self.protein_types,
+                                      self.mode)
+            desc = []
+            for mol_type, prot_type in pairs:
+                d = distance(prot_dict[prot_type]['coords'],
+                             mol_dict[mol_type]['coords'])[..., np.newaxis]
+                if len(self.cutoff) > 1:
+                    count = ((d > self.cutoff[..., 0]) &
+                             (d <= self.cutoff[..., 1])).sum(axis=(0, 1))
+
+                else:
+                    count = (d <= self.cutoff).sum()
+                desc.append(count)
+            desc = np.array(desc, dtype=int).flatten()
+            out.append(desc)
+
+        #lig_id = ligand_sdf[-15:-4]
+        #subprocess.call("/opt/schrodinger2017-4/qikprop -NOJOBID %s" % ligand_sdf, shell=True)
+
+        #qikprops = {}
+        #with open("%s.CSV" % lig_id) as csvfile:
+            #reader = csv.DictReader(csvfile)
+            #for row in reader:
+                #qikprops["FOSA"] = row["FOSA"]
+                #qikprops["FISA"] = row["FISA"]
+                #qikprops["WPSA"] = row["WPSA"]
+                #qikprops["QPlogPo/w"] = row["QPlogPo/w"]
+                #qikprops["QPlogHERG"] = row["QPlogHERG"]
+                #qikprops["QPlogKhsa"] = row["QPlogKhsa"]
+                #qikprops["QPPMDCK"] = row["QPPMDCK"]
+                #qikprops["QPlogKp"] = row["QPlogKp"]
+        
+        #lig_name = lig_id[:-7]
+        #subprocess.call("rm " + lig_name + "*", shell=True)
+
+        # Add QikProp properties as descriptors
+        #fail = 0
+        #for prop in qikprops:
+            #qikprops[prop]
+            #if qikprops[prop] == '':   # QikProp has failed
+                #if fail == 0:
+                    #with open("./qikFail_eigv.txt", "a+") as results:
+                        #results.write("%s \n" % lig_name)
+                    #fail = 1
+                #out = [np.append(out[0], np.array(0))]
+            #else:
+                #out = [np.append(out[0], np.array(float(qikprops[prop])))]
+
+        # Add Number of rotatable bonds
+        for mol in pybel.readfile("sdf", ligand_sdf): # can be sdf or mol2
+            out = [np.append(out[0], np.array(mol.OBMol.NumRotors()))]
+
+        # Add number of aromatic rings
+        for mol in pybel.readfile("sdf", ligand_sdf): # could be sdf or mol2
+            result = ["Aromatic" for r in mol.OBMol.GetSSSR() if r.IsAromatic()]
+            out = [np.append(out[0], np.array(len(result)))]
+
+        pdb = parsePDB(protein_pdb)
+        calphas = pdb.select('calpha')
+
+        anm = ANM('pdb ANM analysis')
+        anm.buildHessian(calphas, cutoff=12.0)
+        anm.getHessian().round(3)
+        anm.calcModes(n_modes = nmbr_modes)
+
+        # Add NMA Length
+        out = [np.append(out[0], np.array(len(anm.getEigvals())))]
+        out = [np.append(out[0], np.array(len(anm.getEigvecs())))]
+
+        # Add NMA Eigenvalues
+        # for mode in anm:
+        #     desc = np.array(mode.getEigval(), dtype=int).flatten()
+        #     out = [np.append(out[0], np.array(mode.getEigval()))]
+
+        return np.vstack(out)
 
     def build_stand_alone(self, ligands, lig_sdf, protein, prot_pdb, nmbr_modes, schroedinger_path):
         """Combines qikprop properties, #aromatic rings, #rotatable bons, #eigenvectors
